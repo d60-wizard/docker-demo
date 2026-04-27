@@ -1,29 +1,36 @@
-FROM node:16-alpine as build-stage
-# ^ Взял 16, так как у тебя amqplib требует node <= 15 (18-я может давать ошибки в рантайме), 
-# но 16 обычно еще переваривает старые пакеты лучше, чем 18.
+# 1. Используем 14-alpine, так как ваши зависимости (amqplib, angular-devkit) 
+# жестко завязаны на старые версии Node.js (до 15 версии).
+FROM node:14-alpine as build-stage
 
 WORKDIR /app
 
-# Копируем все файлы манифестов
+# Копируем файлы манифестов
 COPY package*.json ./
 COPY apps/app/package*.json ./apps/app/
 
-# Устанавливаем зависимости в корень
-RUN npm install --legacy-peer-deps
+# Устанавливаем зависимости.
+# В node 14 нет флага --legacy-peer-deps, но если npm обновится внутри образа, он может понадобиться.
+RUN npm install
 
 # Копируем весь исходный код
 COPY . .
 
-# --- КЛЮЧЕВОЕ ИСПРАВЛЕНИЕ ---
-# Вместо перехода в WORKDIR и запуска npm run build там,
-# запускаем билд через флаг --prefix, чтобы npm видел node_modules в корне.
-ARG env=prod
-RUN PUBLIC_URL=http://127.0.0.1:3001 npm run build --prefix apps/app
+# Переходим в папку приложения
+WORKDIR /app/apps/app
 
-# --- Финальный этап ---
+# Настраиваем PATH так, чтобы система видела бинарники из корневого node_modules
+ENV PATH /app/node_modules/.bin:$PATH
+
+ARG env=prod
+RUN PUBLIC_URL=http://127.0.0.1:3001 npm run build
+
+# --- Финальный этап: Nginx ---
 FROM nginx:stable-alpine
-# Путь к билду обычно такой, если react-scripts настроен стандартно внутри папки приложения
+
+# Копируем результат сборки
 COPY --from=build-stage /app/apps/app/build /usr/share/nginx/html
+
+# Копируем конфиг
 COPY ./apps/app/nginx.conf /etc/nginx/conf.d/default.conf
 
 EXPOSE 80
