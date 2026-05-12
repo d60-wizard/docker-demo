@@ -13,4 +13,5 @@ COPY --from=build /opt/app/node_modules ./node_modules
 COPY --from=build /opt/app/dist/apps/api ./dist
 COPY package.json ./
 
+EXPOSE 3000
 CMD ["node", "./dist/main.js"]
